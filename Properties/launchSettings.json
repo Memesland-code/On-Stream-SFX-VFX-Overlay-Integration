@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "On-Stream-SFX-VFX-Overlay-Integration (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "On-Stream-SFX-VFX-Overlay-Integration (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

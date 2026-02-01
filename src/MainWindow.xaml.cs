@@ -4,6 +4,8 @@ using Microsoft.UI.Xaml.Controls;
 using On_Stream_SFX_VFX_Overlay_Integration.src;
 using System;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Threading.Tasks;
 using Windows.Media.Core;
 using Windows.Storage;
@@ -55,8 +57,24 @@ namespace On_Stream_SFX_VFX_Overlay_Integration
         {
             if (_currentSelectedFile == null) return;
 
-            var item = new ButtonInstance
+            var mediaType = MediaType.None;
+
+            if (_currentSelectedFile.FileType == ".mp3" || _currentSelectedFile.FileType == ".wav")
             {
+                mediaType = MediaType.Audio;
+            }
+            else if (_currentSelectedFile.FileType == ".mp4" || _currentSelectedFile.FileType == ".mov")
+            {
+                mediaType = MediaType.Video;
+            }
+            else
+            {
+                Debug.WriteLine("WARNING - This type of file is not supported!");
+            }
+
+			var item = new ButtonInstance
+            {
+                MediaType = mediaType,
                 Name = _currentSelectedFile.Name,
                 FilePath = _currentSelectedFile.Path
             };
@@ -68,38 +86,6 @@ namespace On_Stream_SFX_VFX_Overlay_Integration
             _currentSelectedFile = null; // Refresh selected button
         }
 
-        /*
-        private async void TestPlay_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is Button btn && btn.Tag is ButtonInstance item)
-            {
-                try
-                {
-                    var file = await StorageFile.GetFileFromPathAsync(item.FilePath);
-                    var source = MediaSource.CreateFromStorageFile(file);
-                    Player.Source = source;
-                    Player.MediaPlayer.Play();
-
-                    StatusText.Text = $"Testing {item.Name}";
-                }
-                catch (Exception ex)
-                {
-                    StatusText.Text = $"Error while testing {ex.Message}";
-                }
-
-                if (_videoPlayer == null)
-                {
-                    _videoPlayer = new DetachedVideoPlayer();
-                    _videoPlayer.Activate();
-                }
-
-                _videoPlayer.PlayVideo(item.FilePath, 0.5);
-                await Task.Delay(0);
-                _videoPlayer.StopAndHide();
-            }
-        }
-        */
-
 
 
         private async void TestPlay_Click(object sender, RoutedEventArgs e)
@@ -110,35 +96,48 @@ namespace On_Stream_SFX_VFX_Overlay_Integration
                 return;
             }
 
-            try
+            var file = await StorageFile.GetFileFromPathAsync(item.FilePath);
+
+            if (item.MediaType == MediaType.Audio)
             {
-                var file = await StorageFile.GetFileFromPathAsync(item.FilePath);
-                var source = MediaSource.CreateFromStorageFile(file);
+                try
+                {
+                    var source = MediaSource.CreateFromStorageFile(file);
 
-                PlayerControl.MediaPlayer?.Pause();
-                PlayerControl.MediaPlayer.MediaEnded -= OnMediaEnded;
-                PlayerControl.Source = null;
+                    PlayerControl.MediaPlayer?.Pause();
+                    PlayerControl.MediaPlayer.MediaEnded -= OnMediaEnded;
+                    PlayerControl.Source = null;
 
-                PlayerControl.Source = source;
-                PlayerControl.MediaPlayer.MediaEnded += OnMediaEnded;
-                PlayerControl.MediaPlayer.Play();
+                    PlayerControl.Source = source;
+                    PlayerControl.MediaPlayer.MediaEnded += OnMediaEnded;
+                    PlayerControl.MediaPlayer.Play();
 
-                StatusText.Text = $"Testing media: {item.Name}";
+                    StatusText.Text = $"Testing media: {item.Name}";
+                }
+                catch (Exception ex)
+                {
+                    StatusText.Text = $"Error while playing audio: {ex.Message}";
+                }
             }
-            catch (Exception ex)
+            else if (item.MediaType == MediaType.Video)
             {
-                StatusText.Text = $"Error while playing media: {ex.Message}";
-            }
+                try
+                {
+				    if (_videoPlayer == null)
+				    {
+					    _videoPlayer = new DetachedVideoPlayer();
+				    }
 
-            if (_videoPlayer == null)
-            {
-                _videoPlayer = new DetachedVideoPlayer();
-                _videoPlayer.Activate();
-            }
-
-            _videoPlayer.PlayVideo(item.FilePath, 0.5);
-            await Task.Delay(0);
-            _videoPlayer.StopAndHide();
+				    _videoPlayer.PlayVideo(item.FilePath, 0.5);
+				    
+                    await Task.Delay(10000);
+				    _videoPlayer.StopAndHide();
+                }
+                catch (Exception ex)
+                {
+                    StatusText.Text = $"Error while playing video: {ex.Message}";
+                }
+			}
         }
 
 

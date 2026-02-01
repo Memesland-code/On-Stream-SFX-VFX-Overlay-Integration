@@ -1,151 +1,133 @@
-﻿using Microsoft.UI;
+﻿using LibVLCSharp.Shared;
+using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 using System;
-using System.Windows.Forms;
-using Windows.Graphics;
 using WinRT.Interop;
+using Windows.Graphics;
 using System.Runtime.InteropServices;
-using Windows.Media.Core;
+using System.Diagnostics;
 
 namespace On_Stream_SFX_VFX_Overlay_Integration.src
 {
     public sealed partial class DetachedVideoPlayer : Window
     {
-        private MediaPlayerElement _mediaPlayer;
-        private AppWindow _appWindow;
-        private SizeInt32 _screenSize;
-        private bool _isInitialized = false;
+		private LibVLC _libVLC;
+		private MediaPlayer _mediaPlayer;
+		private AppWindow _appWindow;
+		private IntPtr _hwnd;
 
-        // Base init of window
-        public void VideoOverlayWindow()
-        {
-            // Init XAML content - minimal
-            var rootGrid = new Grid
-            {
-                Background = new SolidColorBrush(Windows.UI.Color.FromArgb(0, 0, 0, 0))
-            };
+		public DetachedVideoPlayer()
+		{
+			// Init LibVLC
+			Core.Initialize();
 
-            _mediaPlayer = new MediaPlayerElement
-            {
-                AreTransportControlsEnabled = false,
-                AutoPlay = true,
-                Stretch = Stretch.UniformToFill,
-                IsFullWindow = true
-            };
+			_libVLC = new LibVLC("--no-osd", "--no-video-title-shown");
 
-            rootGrid.Children.Add(_mediaPlayer);
-            Content = rootGrid;
+			// Creating video player
+			_mediaPlayer = new MediaPlayer(_libVLC);
 
-            //Get HWND and AppWindow
-            var hwnd = WindowNative.GetWindowHandle(this);
-            var windowId = Win32Interop.GetWindowIdFromWindow(hwnd);
-            _appWindow = AppWindow.GetFromWindowId(windowId);
+			// Getting hwnd
+			_hwnd = WindowNative.GetWindowHandle(this);
 
-            // Manage window position and size on screen
-            _appWindow.Title = "";
-            _appWindow.TitleBar.ExtendsContentIntoTitleBar = true;
+			// Apply window flags
+			ApplyOverlayStyles(_hwnd);
 
-            var primaryScreen = Screen.PrimaryScreen;
-            if (primaryScreen != null)
-            {
-                _screenSize = new SizeInt32(primaryScreen.Bounds.Width, primaryScreen.Bounds.Height);
-            } else
-            {
-                _screenSize = new SizeInt32(1920, 1080);
-            }
-            _appWindow.Resize(_screenSize);
+			// Get AppWindow once activated
+			var windowId = Win32Interop.GetWindowIdFromWindow(_hwnd);
+			_appWindow = AppWindow.GetFromWindowId(windowId);
 
-            _appWindow.Move(new PointInt32(
-                (int)primaryScreen.Bounds.Left,
-                (int)primaryScreen.Bounds.Top));
+			if (_appWindow != null)
+			{
+				_appWindow.Title = "";
+				_appWindow.TitleBar.ExtendsContentIntoTitleBar = true;
+				_appWindow.Resize(new Windows.Graphics.SizeInt32(2560, 1440));
+				_appWindow.IsShownInSwitchers = false;
 
-            ApplyOverlayStyles(hwnd);
-
-            // Set always visible and at top
-            _appWindow.IsShownInSwitchers = false;
-            this.Activated += OnActivated;
-            //_appWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
-        }
+				var primaryScreen = System.Windows.Forms.Screen.PrimaryScreen;
+				_appWindow.Move(new Windows.Graphics.PointInt32(
+					(int)primaryScreen.Bounds.Left,
+					(int)primaryScreen.Bounds.Top)
+				);
+			}
+		}
 
 
 
-        // Event to check window initialization
-        private void OnActivated(object sender, WindowActivatedEventArgs args)
-        {
-            if (args.WindowActivationState == WindowActivationState.CodeActivated || args.WindowActivationState == WindowActivationState.PointerActivated)
-            {
-                _isInitialized = true;
-                this.Activated -= OnActivated;
-            }
-        }
+		private void ApplyOverlayStyles(IntPtr hwnd)
+		{
+			const int GWL_EXSTYLE = -20;
+			const uint WS_EX_LAYERED =		0x00080000;
+			const uint WS_EX_TRANSPARENT =	0x00000020;
+			const uint WS_EX_NOACTIVE =		0x08000000;
+			const uint WS_EX_TOOLWINDOW =	0x00000080;
+			const uint WS_EX_TOPMOST =		0x00000008;
+
+			int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+			uint newExStyle = (uint)exStyle | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST;
+			SetWindowLong(hwnd, GWL_EXSTYLE, (int)newExStyle);
+
+			// Sets window transparent - makes LibVLC draw directly in HWND with alpha
+			SetLayeredWindowAttributes(hwnd, 0, 255, 0x02);
+		}
 
 
 
-        // Window info and parameters for play
-        private void ApplyOverlayStyles(IntPtr hwnd)
-        {
-            const int GWL_EXSTYLE = -20;
+		public void PlayVideo(string filePath, double volume = 1.0f)
+		{
+			if (string.IsNullOrEmpty(filePath) || _appWindow == null)
+			{
+				Debug.WriteLine("Can play video: file path or AppWindow is missing");
+				return;
+			}
 
-            // Essential flags
-            const int WS_EX_LAYERED     = 0x00080000;   // Transparency
-            const int WS_EX_TRANSPARENT = 0x00000020;   // Clicks go through
-            const int WS_EX_NOACTIVE    = 0x08000000;   // Never gets focus
-            const int WS_EX_TOOLWINDOW  = 0x00000080;   // Not shown in tasks bar
-            const int WS_EX_TOPMOST     = 0x00000008;   // Always on top
+			using var media = new Media(_libVLC, new Uri(filePath));
+			_mediaPlayer.Media = media;
+			_mediaPlayer.Volume = (int)(volume * 100);
 
-            int currentStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-
-            uint newStyle = (uint)currentStyle;
-            newStyle |= WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST;
-
-            SetWindowLong(hwnd, GWL_EXSTYLE, (int)newStyle);
-        }
+			// Adds media player to window HWND
+			_mediaPlayer.Hwnd = _hwnd;
+			_appWindow.Show();
+			_mediaPlayer.Play();
+		}
 
 
 
-        // Play video on main screen
-        public void PlayVideo(string filePath, double volume = 1.0)
-        {
-            if (string.IsNullOrEmpty(filePath)) return;
+		public void StopAndHide()
+		{
+			// Stops media and detaches hwnd
+			_mediaPlayer?.Stop();
+			_mediaPlayer.Media = null;
+			_mediaPlayer.Hwnd = IntPtr.Zero;
 
-            // Forces window init if still not done
-            if (!_isInitialized)
-            {
-                this.Activate();
-            }
+			if (_appWindow != null)
+			{
+				_appWindow.Hide();
+			}
 
-            // Manage source play
-            DispatcherQueue.TryEnqueue(() =>
-            {
-                var source = MediaSource.CreateFromUri(new Uri(filePath));
-                _mediaPlayer.Source = source;
-                _mediaPlayer.MediaPlayer.Volume = volume;
-                _mediaPlayer.MediaPlayer.Play();
-
-                _appWindow.Show();
-            });
-        }
+			this.Closed += OnClosed;
+		}
 
 
 
-        // Stop video and hide window
-        public void StopAndHide()
-        {
-            _mediaPlayer.MediaPlayer.Pause();
-            _appWindow.Hide();
-        }
+		private void OnClosed(object sender, WindowEventArgs args)
+		{
+			_mediaPlayer?.Dispose();
+			_libVLC?.Dispose();
+		}
 
 
 
 
 
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+		[DllImport("user32.dll", SetLastError = true)]
+		private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
 
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
-    }
+		[DllImport("user32.dll", SetLastError = true)]
+		private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
+		[DllImport("user32.dll", SetLastError = true)]
+		[return: MarshalAs(UnmanagedType.Bool)]
+		private static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, uint dwFlags);
+	}
 }

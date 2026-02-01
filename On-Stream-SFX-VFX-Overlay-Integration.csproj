@@ -14,6 +14,20 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+	<!-- Force inclusion of libs -->
+    <ItemGroup>
+	  <None Update="libvlc.dll">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	    <None Update="libvlccore.dll">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <!-- Pour le dossier plugins (si pas copié auto) -->
+	  <Content Include="plugins\**">
+	  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </Content>
+  </ItemGroup>
+
   <ItemGroup>
     <Content Include="Assets\SplashScreen.scale-200.png" />
     <Content Include="Assets\LockScreenLogo.scale-200.png" />

@@ -4,7 +4,6 @@ using Microsoft.UI.Xaml.Controls;
 using On_Stream_SFX_VFX_Overlay_Integration.src;
 using System;
 using System.Collections.ObjectModel;
-using System.ComponentModel;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using Windows.Media.Core;
@@ -20,12 +19,16 @@ namespace On_Stream_SFX_VFX_Overlay_Integration
         private readonly ObservableCollection<ButtonInstance> _buttons = new();
         private StorageFile _currentSelectedFile;
         private DetachedVideoPlayer _videoPlayer;
+        private LibVLC _libVLC;
 
         public MainWindow()
         {
             InitializeComponent();
 
-            MediaListView.ItemsSource = _buttons;
+            Core.Initialize();
+			_libVLC = new LibVLC("--no-osd", "--no-video-title-show", "--direct3d11-hw-blending");
+
+			MediaListView.ItemsSource = _buttons;
         }
 
         private async void PickFile_Click(object sender, RoutedEventArgs e)
@@ -40,6 +43,8 @@ namespace On_Stream_SFX_VFX_Overlay_Integration
             picker.FileTypeFilter.Add(".wav");
             picker.FileTypeFilter.Add(".mp4");
             picker.FileTypeFilter.Add(".mov");
+            picker.FileTypeFilter.Add(".mxf");
+            picker.FileTypeFilter.Add(".webm");
 
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
             WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
@@ -63,7 +68,7 @@ namespace On_Stream_SFX_VFX_Overlay_Integration
             {
                 mediaType = MediaType.Audio;
             }
-            else if (_currentSelectedFile.FileType == ".mp4" || _currentSelectedFile.FileType == ".mov")
+            else if (_currentSelectedFile.FileType == ".mp4" || _currentSelectedFile.FileType == ".mov" || _currentSelectedFile.FileType == ".mxf" || _currentSelectedFile.FileType == ".webm")
             {
                 mediaType = MediaType.Video;
             }
@@ -125,13 +130,12 @@ namespace On_Stream_SFX_VFX_Overlay_Integration
                 {
 				    if (_videoPlayer == null)
 				    {
-					    _videoPlayer = new DetachedVideoPlayer();
+					    _videoPlayer = new DetachedVideoPlayer(_libVLC);
 				    }
 
-				    _videoPlayer.PlayVideo(item.FilePath, 0.5);
-				    
-                    await Task.Delay(10000);
-				    _videoPlayer.StopAndHide();
+				    _videoPlayer.PlayVideo(item.FilePath, 1);
+
+                    _videoPlayer._vlcPlayer.EndReached += (s, e) => _videoPlayer.StopAndHide();
                 }
                 catch (Exception ex)
                 {
